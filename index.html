@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title></title>
+<style>
+
+    body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+    }
+    #map {
+        height: 350px;
+        width: 100%;
+    }
+    #venue {
+		display: grid;
+		grid-template-columns: 1fr 1fr; 
+		gap: 10px;
+		width: 100%;
+        padding: 0px 20px 20px;
+		box-sizing: border-box;
+        background: #f7f7f7;
+		justify-content: center;
+    }
+	
+	.venue-wrapper {
+		display: inline-flex;      /* inline so it sizes to text width */
+		align-items: center;       /* vertical centering */
+		justify-content: left;   /* horizontal centering */
+		gap: 8px;                  /* optional spacing */
+		position: relative;
+	}
+	
+	.venue-tile {
+        background: #f7f7f7;
+        border-radius: 6px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        text-align: left;
+	}
+	h3 {
+		text-align:center;
+		font-style:italic;
+		background-color: #f7f7f7;
+		}
+		
+	.pin {
+	    --pin-color: #e11d48;    /* default color */
+		--pin-size: 32px;        /* circle diameter */
+		position: relative;
+		width: var(--pin-size);
+		height: var(--pin-size);
+		background: var(--pin-color);
+		border-radius: 50%;
+		box-shadow: none;
+		display: inline-grid;
+		place-items: center;
+		color: white;            /* label color */
+		font: 600 14px/1.1 system-ui, sans-serif;
+		transform: translateY(-6%); /* subtle vertical nudge */
+	}
+
+	/* Inner dot (optional) */
+	.pin::before {
+		content: "";
+		width: calc(var(--pin-size) * 0.28);
+		height: calc(var(--pin-size) * 0.28);
+		background: rgba(255,255,255);
+		border-radius: 50%;
+		box-shadow: none;
+	}
+
+	/* Tail */
+	.pin::after {
+		content: "";
+		position: absolute;
+		bottom: calc(var(--pin-size) * -0.125);
+		left: 50%;
+		width: calc(var(--pin-size) * 0.4);
+		height: calc(var(--pin-size) * 0.4);
+		background: var(--pin-color);
+		transform: translateX(-50%) rotate(45deg);
+		box-shadow: none;
+	}
+</style>
+</head>
+<body>
+
+<h2 id="app-title" style="text-align:center;">xx</h2>
+<div id="map"></div>
+<h3>Displayed by Distance</h3>
+<div id="venue"></div>
+
+<script>
+
+let apps = {
+        "accomodations": { radius: 3, apptitle: "Nearby Accomodations", h2text: "Nearby Accomodations", map_id: "DEMO_ACCOMODATIONS", 
+		                   appFields: "displayName, location, adrFormatAddress, formattedAddress, nationalPhoneNumber", 
+						   appTypes: "bed_and_breakfast, hotel, extended_stay_hotel, inn, motel" },
+		"fuel":          { radius: 5, apptitle: "Nearby Gas Stations", h2text: "Nearby Gas Stations", map_id: "DEMO_GAS", 
+		                   appFields: "displayName, location, adrFormatAddress, formattedAddress, nationalPhoneNumber, fuelOptions", 
+						   appTypes: "convenience_store, gas_station" },
+		"food":          { radius: 5, apptitle: "Nearby Eats", h2text: "Nearby Eats", map_id: "DEMO_EATS", 
+		                   appFields: "displayName, location, adrFormatAddress, formattedAddress, nationalPhoneNumber", 
+						   appTypes: "restaurant, bar_and_grill, cafe, coffee_shop, deli, diner, food_court, pub, steak_house" },
+		"fun":          { radius: 25, apptitle: "Entertainment", h2text: "Entertainment", map_id: "DEMO_FUN", 
+						   appFields: "displayName, location, adrFormatAddress, formattedAddress, nationalPhoneNumber", 
+						   appTypes: "amphitheatre, aquarium, comedy_club, concert_hall, event_venue, botanical_garden, bowling_alley, garden, amusement_center, hiking_area, historical_landmark, live_music_venue, movie_theater, national_park, night_club, observation_deck, park, state_park, tourist_attraction, wildlife_park" }   
+    };  // apps
+
+let map;
+let infoWindow;
+let AdvancedMarkerElement;
+let latitude=0;
+let longitude=0;
+let appname;
+
+
+async function initApp() {
+
+	try {
+   
+
+		
+		await getIpLocation();
+		
+		appInit();
+		
+		// Initialize Google Map
+           initMap(latitude, longitude);
+		
+		try {
+		} catch (error) {
+			document.getElementById("venue").innerText = "Error intializing map: " + error;
+		 }
+
+	} catch (error) {
+		document.getElementById("venue").innerText = "InitApp Error";
+	}
+
+}
+
+function appInit() {
+	    let queryString = window.location.search;
+		let urlParams = new URLSearchParams(queryString);
+		if (urlParams.has('fixedip')) {
+		   // using a fixed ip for area near RDU
+		   latitude = "35.9011730";
+		   longitude = "-78.7678900";
+		}	
+		
+		if (urlParams.has('app')) {
+		   let tmpName = urlParams.get('app');
+		   appname = tmpName.toLowerCase();
+		   
+		   document.title = apps[appname].apptitle;
+		   document.getElementById("app-title").textContent = apps[appname].h2text + "  (within " + apps[appname].radius + " miles)";
+		}		
+}
+
+async function getIpLocation() {
+      const apiKey = "b1e3df1df2354b0ca4819cd31d4222d2"; // Replace with your real API key
+      const url = `https://api.ipgeolocation.io/v2/ipgeo?apiKey=${apiKey}`;
+
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error("HTTP error " + response.status);
+        }
+        const data = await response.json();
+
+        latitude = data.location.latitude;
+        longitude = data.location.longitude;
+      } catch (error) {
+        document.getElementById("venue").innerHTML =
+          "Error fetching location: " + error.message;
+      }
+    }
+
+async function initMap(lat, lon) {
+    const { Map, InfoWindow } = await google.maps.importLibrary('maps');
+	const { AdvancedMarkerElement} = await google.maps.importLibrary("marker");
+    let center = new google.maps.LatLng(lat, lon);
+	let mapidstr = apps[appname].map_id;
+    map = new Map(document.getElementById('map'), {
+        center: center,
+        zoom: 11,
+        mapId: mapidstr,
+        mapTypeControl: false,
+    });
+	
+	let fLat = parseFloat(lat);
+	let fLon = parseFloat(lon);
+
+	// The advanced marker, positioned at current location
+	const markerView = new AdvancedMarkerElement({
+                map,
+                position: { lat: fLat, lng: fLon },
+				title: "You are here",
+				gmpClickable: true,
+				gmpDraggable: false,
+            });
+    await nearbySearch(center, apps[appname].radius);
+}
+
+
+async function nearbySearch(center, miles) {
+    const { Place, SearchNearbyRankPreference } = await google.maps.importLibrary('places');
+    const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker");
+	const desiredCnt = 20;
+	const pinBackgrounds = [ "#E0F0FF","#C2E0FF","#A3D1FF","#85C2FF","#66B3FF","#4DA6FF","#3399FF","#1A8CFF","#007FFF","#0073E6",
+								"#0066CC","#0059B3","#004C99","#003F80","#003366","#00264D","#1F3B73","#2A4E8A","#3B6AA0","#5480B8" ];
+
+    // convert miles to meters for api.
+    const mradius = miles * 1609.34;
+	
+	const venueEL = document.getElementById("venue");
+    venueEL.innerHTML = "";
+	
+    const request = {
+        // required parameters
+        fields: apps[appname].appFields.split(",").map(item => item.trim()),
+        locationRestriction: {
+            center: center,
+            radius: mradius,
+        },
+        // optional parameters
+        includedPrimaryTypes: apps[appname].appTypes.split(",").map(item => item.trim()),
+        maxResultCount: desiredCnt,
+        rankPreference: SearchNearbyRankPreference.DISTANCE,
+        language: 'en-US',
+        region: 'us',
+    };
+    
+    const { places } = await Place.searchNearby(request);
+	
+	// now filter out duplicates if any
+	const seen = new Set();
+	const uniquePlaces = places.filter(item => {
+	   const isDup = seen.has(item.id);
+	   seen.add(item.id);
+	   return !isDup;
+	   });
+	   
+	console.log("places count: " + places.length);
+	console.log("uniquePlaces count: " + uniquePlaces.length);
+	
+    if (uniquePlaces.length) {
+        console.log(uniquePlaces);
+        const { LatLngBounds } = await google.maps.importLibrary("core");
+        const bounds = new LatLngBounds();
+        // Loop through and get all the results.
+        uniquePlaces.forEach((place, index) => {
+				const pin = new PinElement({
+				background: pinBackgrounds[index],
+				glyphColor: 'white',
+				});
+            const markerView = new AdvancedMarkerElement({
+                map,
+                position: place.location,
+                title: place.displayName,
+				gmpClickable: true,
+				gmpDraggable: false,
+				content: pin,
+				/*
+				icon: {
+					url: place.icon,
+					scaledSize: new google.maps.size(25,25)
+					},
+					*/
+            });
+            bounds.extend(place.location);
+            console.log(place);
+			
+			// Create venue tile
+			const wrapper = document.createElement("div");
+			wrapper.className = "venue-wrapper";
+			
+			const div = document.createElement("div");
+			div.className = "venue-tile";
+			// <img src="${day.dayIcon}" alt="${day.dayShort}"><br>
+			div.innerHTML = `
+				<strong>${place.displayName}</strong><br>
+				${place.formattedAddress}<br>
+			`;
+			
+			if (place.nationalPhoneNumber === null) {
+				div.innerHTML += `Phone Number Unavailable<br>`;
+			} else {
+				div.innerHTML += `${place.nationalPhoneNumber}<br>`;
+			}
+			
+			const tilePin = document.createElement("div");
+			tilePin.className = "pin"
+			tilePin.style.setProperty("--pin-color", pinBackgrounds[index]);
+			
+			wrapper.appendChild(tilePin);
+			wrapper.appendChild(div);
+			venueEL.appendChild(wrapper);			
+        });
+        map.fitBounds(bounds);
+    }
+    else {
+        console.log("No results");
+    }
+}
+
+
+window.initApp = initApp;
+</script>
+
+<!-- Replace YOUR_GOOGLE_MAPS_API_KEY with your actual key -->
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDJMh2yq_dkOpJnb_EbhEw1wDfjlkbKMLs&callback=initApp"></script>
+
+</body>
+</html>
